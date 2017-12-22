@@ -11,6 +11,8 @@ from flask_restful import Resource, Api
 
 # Non Admin
 from shopping_cart.cart.resources import Cart, CartDetail, CartAddProduct
+from shopping_cart.cart.resources import CartRemoveProduct
+
 from .messages import _MSG900, _MSG901, _MSG902, _MSG903, _MSG904
 
 
@@ -65,5 +67,8 @@ def configure_api(app):
     api.add_resource(Cart, '/carts')
     api.add_resource(CartDetail, '/carts/<string:cart_id>')
     api.add_resource(CartAddProduct, '/carts/<string:cart_id>/product/add')
+    api.add_resource(
+        CartRemoveProduct, '/carts/<string:cart_id>/product/remove'
+    )
 
     api.init_app(app)

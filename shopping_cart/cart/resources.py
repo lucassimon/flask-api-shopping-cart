@@ -108,16 +108,12 @@ class CartDetail(Resource):
 
             return resp_exception('Carts', description=e)
 
-        data = {
-            'id': '{}'.format(cart.id),
-            'user_id': cart.user_id,
-            'user_email': cart.user_email,
-            'qty': cart.qty,
-            'subtotal': cart.subtotal,
-            'total': cart.total,
-            'shipping_total': cart.shipping_total,
-            'suppliers': []
-        }
+        subtotal, total = calculate_total_and_subtotal(cart.suppliers)
+        cart.subtotal = subtotal
+        cart.total = total
+
+        # TODO: Serializer all objects
+        data = cart_detail(cart)
 
         for supplier in cart.suppliers:
             data['suppliers'].append(supplier_detail(supplier))
@@ -261,7 +257,6 @@ class CartAddProduct(Resource):
         cart.subtotal = subtotal
         cart.total = total
 
-
         try:
             # TODO: Update document with atomic update
             cart.updated = datetime.now()
@@ -320,13 +315,103 @@ class CartRemoveProduct(Resource):
 
             return resp_exception('Carts', description=e)
 
+        supplier_data, product_data = None, None
+        data = None
+
+        try:
+            data = request.get_json()
+        except Exception:
+            return resp_form_invalid('Carts', {'product': 'not empty'})
+
+        supplier_data = data.get('supplier', None)
+        product_data = data.get('product', None)
+
+        if supplier_data:
+            supplier = get_supplier_by_id(
+                cart.suppliers, supplier_data.get('supplier_id')
+            )
+        else:
+            return {
+                'status': 404,
+                'resource': 'Cart',
+                'message': _MSG104,
+                'description': 'Este fornecedor não foi encontrado',
+                'data': data
+            }, 404, {'Set-Cookie': 'api-shopping-cart={}'.format(cart.id)}
+
+        # Object Item Document
+
+        if product_data:
+            product = get_product_by_id(
+                supplier.items, product_data.get('product_id')
+            )
+        else:
+            return {
+                'status': 404,
+                'resource': 'Cart',
+                'message': _MSG104,
+                'description': 'Este produto não foi encontrado',
+                'data': data
+            }, 404, {'Set-Cookie': 'api-shopping-cart={}'.format(cart.id)}
+
         # TODO: With cart get product and do an unset atomic update
         # http://docs.mongoengine.org/guide/querying.html#atomic-updates
 
-        # TODO: Recalculate all the prices
+        # TODO: Recalculate all the product prices
 
-        # TODO: Serializer all objects
-        # get_cart()
+        if not product:
+            # TODO: Serializer all objects
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
+            return {
+                'status': 404,
+                'resource': 'Cart',
+                'message': _MSG104,
+                'description': 'Este produto não foi encontrado',
+                'data': data
+            }, 404, {'Set-Cookie': 'api-shopping-cart={}'.format(cart.id)}
+
+        try:
+            supplier.items.remove(product)
+
+            if len(supplier.items) == 0:
+                cart.suppliers.remove(supplier)
+                supplier = None
+
+        except Exception as e:
+            # TODO: Serializer all objects
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
+            return {
+                'status': 500,
+                'resource': 'Cart',
+                'message': _MSG104,
+                'description': 'Ocorreu um ero ao remover o produto',
+                'data': data
+            }, 500, {'Set-Cookie': 'api-shopping-cart={}'.format(cart.id)}
+
+        # TODO: recalculate the prices on each item
+        # The supplier object has total and subtotal. This is the sum of
+        # all items
+
+        if supplier:
+            subtotal, total = calculate_total_and_subtotal(supplier.items)
+            supplier.subtotal = subtotal
+            supplier.total = total
+
+        # TODO: recalculate the prices of cart
+        # The cart has many suppliers. So is need to save the total and
+        # subtotal on each supplier
+
+        subtotal, total = calculate_total_and_subtotal(cart.suppliers)
+        cart.subtotal = subtotal
+        cart.total = total
 
         try:
             # TODO: Update document with atomic update
@@ -348,6 +433,7 @@ class CartRemoveProduct(Resource):
 
             return resp_exception('Carts', description=e)
 
+        # TODO: Serializer all objects
         data = cart_detail(cart)
 
         for supplier in cart.suppliers:
