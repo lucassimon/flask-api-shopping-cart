@@ -351,6 +351,11 @@ class CartRemoveProduct(Resource):
                 cart.suppliers, supplier_data.get('supplier_id')
             )
         else:
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
             return {
                 'status': 404,
                 'resource': 'Cart',
@@ -366,6 +371,11 @@ class CartRemoveProduct(Resource):
                 supplier.items, product_data.get('product_id')
             )
         else:
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
             return {
                 'status': 404,
                 'resource': 'Cart',
@@ -513,6 +523,11 @@ class CartIncrementProduct(Resource):
             if not isinstance(supplier, Supplier):
                 return supplier
         else:
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
             return {
                 'status': 404,
                 'resource': 'Cart',
@@ -532,6 +547,11 @@ class CartIncrementProduct(Resource):
                 return product
 
         else:
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
             return {
                 'status': 404,
                 'resource': 'Cart',
@@ -609,7 +629,7 @@ class CartIncrementProduct(Resource):
 
 class CartDecrementProduct(Resource):
 
-    def put(self, cart_id):
+    def patch(self, cart_id):
 
         try:
             cart = MCart.objects.get(id=cart_id)
@@ -634,18 +654,109 @@ class CartDecrementProduct(Resource):
 
             return resp_exception('Carts', description=e)
 
-        # TODO: Get and find the product_id
+        supplier_data, product_data = None, None
+        data = None
 
-        # TODO: With cart get product and do an dec atomic update
+        try:
+            data = request.get_json()
+        except Exception:
+            return resp_form_invalid('Carts', {'product': 'not empty'})
+
+        supplier_data = data.get('supplier', None)
+        product_data = data.get('product', None)
+
+        if supplier_data:
+            supplier = get_supplier_by_id(
+                cart.suppliers, supplier_data.get('supplier_id')
+            )
+
+            if not isinstance(supplier, Supplier):
+                return supplier
+        else:
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
+            return {
+                'status': 404,
+                'resource': 'Cart',
+                'message': _MSG104,
+                'description': 'Este fornecedor não foi encontrado',
+                'data': data
+            }, 404, {'Set-Cookie': 'api-shopping-cart={}'.format(cart.id)}
+
+        # Object Item Document
+
+        if product_data:
+            product = get_product_by_id(
+                supplier.items, product_data.get('product_id')
+            )
+
+            if not isinstance(product, Item):
+                return product
+
+        else:
+            data = cart_detail(cart)
+
+            for supplier in cart.suppliers:
+                data['suppliers'].append(supplier_detail(supplier))
+
+            return {
+                'status': 404,
+                'resource': 'Cart',
+                'message': _MSG104,
+                'description': 'Este produto não foi encontrado',
+                'data': data
+            }, 404, {'Set-Cookie': 'api-shopping-cart={}'.format(cart.id)}
+
+        # TODO: With cart get product and do an unset atomic update
         # http://docs.mongoengine.org/guide/querying.html#atomic-updates
 
-        # TODO: Decrement qty in all embbed documents
+        # TODO: Recalculate all the product prices
 
-        # TODO: Recalculate all the prices
+        qty = product_data.get('qty', None)
 
-        # TODO: Serializer all objects
-        # get_cart()
-        #
+        if qty:
+            product.qty -= qty
+
+            if product.qty <= 0:
+                data = cart_detail(cart)
+
+                for supplier in cart.suppliers:
+                    data['suppliers'].append(supplier_detail(supplier))
+
+                return {
+                    'status': 400,
+                    'resource': 'Cart',
+                    'message': _MSG104,
+                    'description': 'A quantidade não pode ser menor que zero.',
+                    'data': data
+                }, 400, {'Set-Cookie': 'api-shopping-cart={}'.format(cart.id)}
+
+            # TODO: Recalculate all the product prices
+            subtotal, total = calculate_product_price(product)
+
+            product.total = total
+            product.subtotal = subtotal
+
+        # TODO: recalculate the prices on each item
+        # The supplier object has total and subtotal. This is the sum of
+        # all items
+
+        if supplier:
+            subtotal, total = calculate_total_and_subtotal(supplier.items)
+            supplier.subtotal = subtotal
+            supplier.total = total
+
+        # TODO: recalculate the prices of cart
+        # The cart has many suppliers. So is need to save the total and
+        # subtotal on each supplier
+
+        subtotal, total = calculate_total_and_subtotal(cart.suppliers)
+        cart.subtotal = subtotal
+        cart.total = total
+
         try:
             # TODO: Update document with atomic update
             cart.updated = datetime.now()
@@ -666,6 +777,7 @@ class CartDecrementProduct(Resource):
 
             return resp_exception('Carts', description=e)
 
+        # TODO: Serializer all objects
         data = cart_detail(cart)
 
         for supplier in cart.suppliers:

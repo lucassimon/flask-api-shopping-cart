@@ -13,6 +13,7 @@ from flask_restful import Resource, Api
 from shopping_cart.cart.resources import Cart, CartDetail, CartAddProduct
 from shopping_cart.cart.resources import CartRemoveProduct
 from shopping_cart.cart.resources import CartIncrementProduct
+from shopping_cart.cart.resources import CartDecrementProduct
 
 from .messages import _MSG900, _MSG901, _MSG902, _MSG903, _MSG904
 
@@ -72,7 +73,10 @@ def configure_api(app):
         CartRemoveProduct, '/carts/<string:cart_id>/product/remove'
     )
     api.add_resource(
-        CartIncrementProduct, '/carts/<string:cart_id>/product/qty/add'
+        CartIncrementProduct, '/carts/<string:cart_id>/product/qty/inc'
+    )
+    api.add_resource(
+        CartDecrementProduct, '/carts/<string:cart_id>/product/qty/dec'
     )
 
     api.init_app(app)
